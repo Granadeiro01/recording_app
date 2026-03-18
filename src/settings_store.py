@@ -44,6 +44,8 @@ class TranscriptionSettings:
 
     def groq_language(self) -> str | None:
         """Return the language parameter for Groq, or None for auto-detection."""
+        if self.preserve_spoken_language:
+            return None
         if self.language == DEFAULT_LANGUAGE:
             return None
         return self.language
@@ -56,8 +58,9 @@ class TranscriptionSettings:
 
         if self.preserve_spoken_language:
             parts.append(
-                "Transcribe exactly as spoken. Preserve code-switching and keep all "
-                "spoken languages as written. Do not translate or normalize the speech."
+                "Transcribe exactly as spoken. Keep each spoken language in its original "
+                "language. Preserve code-switching. Do not translate, normalize, or "
+                "collapse mixed-language speech into one language."
             )
 
         prompt = " ".join(parts).strip()
@@ -80,13 +83,29 @@ def normalize_language(raw_value: str) -> str:
 
 def render_settings_summary(settings: TranscriptionSettings) -> str:
     """Format settings as a short human-readable summary."""
-    language_label = "Auto" if settings.language == DEFAULT_LANGUAGE else settings.language.upper()
+    if settings.preserve_spoken_language:
+        language_label = (
+            "Auto (language hint ignored while preservation is on)"
+            if settings.language == DEFAULT_LANGUAGE
+            else f"{settings.language.upper()} (ignored while preservation is on)"
+        )
+    else:
+        language_label = "Auto" if settings.language == DEFAULT_LANGUAGE else settings.language.upper()
     preserve_label = "On" if settings.preserve_spoken_language else "Off"
     return (
         "Current transcription settings:\n"
         f"- Language: {language_label}\n"
         f"- Preserve spoken language: {preserve_label}\n\n"
         "Tap a button below to change them."
+        if not settings.preserve_spoken_language
+        else (
+            "Current transcription settings:\n"
+            f"- Language: {language_label}\n"
+            f"- Preserve spoken language: {preserve_label}\n\n"
+            "Tap a button below to change them.\n"
+            "With preservation on, the bot keeps French as French, English as English, and "
+            "does not flatten mixed speech into one language."
+        )
     )
 
 

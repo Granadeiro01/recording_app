@@ -70,8 +70,8 @@ Use `/settings` in the Telegram chat to change how transcription behaves for you
 
 You can:
 
-- choose the transcription language
-- leave it on `auto` for mixed or unknown language audio
+- keep mixed-language speech in the original language
+- choose a preferred language if you want a single-language transcript
 - turn code-switch preservation on or off
 
 The bot saves these choices in a local `.config` file for your Telegram user ID.

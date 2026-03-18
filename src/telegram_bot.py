@@ -150,7 +150,7 @@ def _settings_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
             [
-                InlineKeyboardButton("Set language", callback_data=SETTINGS_CALLBACK_LANGUAGE),
+                InlineKeyboardButton("Preferred language", callback_data=SETTINGS_CALLBACK_LANGUAGE),
                 InlineKeyboardButton("Auto language", callback_data=SETTINGS_CALLBACK_AUTO),
             ],
             [
@@ -205,6 +205,7 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             await query.message.reply_text(
                 "Send the language code you want to use.\n"
                 "Examples: `auto`, `en`, `es`, `pt-br`\n"
+                "This is used only when 'Preserve spoken language' is Off.\n"
                 "Reply with the code as a normal text message.",
                 parse_mode="Markdown",
             )
@@ -269,7 +270,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     await message.reply_text(
         "Send me a voice note, audio file, or audio document and I will transcribe it.\n"
-        "Use /settings to choose the transcription language and whether to preserve code-switching.\n"
+        "Use /settings to keep mixed-language speech in the original language.\n"
         "If you add a caption, I will use it as extra transcription context."
     )
 
@@ -288,7 +289,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "Output:\n"
         "- A TXT file is saved in the configured output directory\n"
         "- A text transcript is returned in chat when it is short enough\n\n"
-        "Use /settings to choose the transcription language and whether to preserve mixed-language speech."
+        "Use /settings to keep mixed-language speech in the original language.\n"
+        "If preservation is Off, the preferred language will be used instead."
     )
 
 
