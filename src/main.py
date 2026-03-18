@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import sys
 
@@ -17,6 +18,8 @@ def main() -> int:
     try:
         application = build_application()
         logger.info("Starting Telegram bot polling")
+        # python-telegram-bot expects a current event loop on Python 3.14.
+        asyncio.set_event_loop(asyncio.new_event_loop())
         application.run_polling()
     except Exception:
         logger.exception("Telegram bot failed to start")
