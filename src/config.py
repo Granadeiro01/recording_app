@@ -21,9 +21,8 @@ class Config:
     INPUT_DIR = Path(os.getenv("INPUT_DIR", BASE_DIR / "input"))
     OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", BASE_DIR / "output"))
 
-    # Audio transcription runtime
-    WHISPER_MODEL_SIZE = os.getenv("WHISPER_MODEL_SIZE", "base")
-    COMPUTE_DEVICE = os.getenv("COMPUTE_DEVICE", "cpu")
+    # Groq transcription runtime
+    GROQ_TRANSCRIPTION_MODEL = os.getenv("GROQ_TRANSCRIPTION_MODEL", "whisper-large-v3")
 
     # Service credentials and integration settings
     GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")

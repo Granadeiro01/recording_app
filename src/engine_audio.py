@@ -1,10 +1,12 @@
-"""Audio transcription engine built on top of faster-whisper."""
+"""Audio transcription engine built on top of the Groq API."""
 
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
-from faster_whisper import WhisperModel
+import groq
+from groq import Groq
 
 from src.config import Config
 
@@ -19,38 +21,61 @@ def _validate_audio_file(file_path: str) -> Path:
     return path
 
 
-def _load_model() -> WhisperModel:
-    """Create the Whisper model using the configured size and device."""
-    return WhisperModel(
-        Config.WHISPER_MODEL_SIZE,
-        device=Config.COMPUTE_DEVICE,
-    )
+def _build_client() -> Groq:
+    """Create a Groq client using the configured API key."""
+    if not Config.GROQ_API_KEY:
+        raise RuntimeError("GROQ_API_KEY is not set in the environment")
+    return Groq(api_key=Config.GROQ_API_KEY)
 
 
-def _segment_to_dict(segment) -> dict:
-    """Convert a faster-whisper segment into a plain dictionary."""
+def _segment_value(segment: Any, key: str) -> Any:
+    """Read a value from either a dict-like or object-like segment."""
+    if isinstance(segment, dict):
+        return segment.get(key)
+    return getattr(segment, key)
+
+
+def _segment_to_dict(segment: Any) -> dict:
+    """Convert a Groq segment into the flat dict shape used by the pipeline."""
     return {
-        "start": float(segment.start),
-        "end": float(segment.end),
-        "text": segment.text.strip(),
+        "start": float(_segment_value(segment, "start")),
+        "end": float(_segment_value(segment, "end")),
+        "text": str(_segment_value(segment, "text")).strip(),
     }
+
+
+def _extract_segments(transcription: Any) -> list[Any]:
+    """Return the list of segment objects from a Groq response."""
+    if isinstance(transcription, dict):
+        return list(transcription.get("segments", []))
+    return list(getattr(transcription, "segments", []))
 
 
 def transcribe_file(file_path: str) -> list[dict]:
     """
-    Transcribe a single audio file and return structured segments.
+    Transcribe a single audio file with Groq and return structured segments.
 
-    The return format is intentionally flat so it can be converted directly
-    into a pandas.DataFrame in the main pipeline.
+    The return format stays flat so it can be converted directly into a
+    pandas.DataFrame in the main pipeline.
     """
     audio_path = _validate_audio_file(file_path)
-    model = _load_model()
+    client = _build_client()
 
-    segments, _info = model.transcribe(str(audio_path))
+    try:
+        with audio_path.open("rb") as audio_file:
+            transcription = client.audio.transcriptions.create(
+                file=audio_file,
+                model=Config.GROQ_TRANSCRIPTION_MODEL,
+                response_format="verbose_json",
+                timestamp_granularities=["segment"],
+                temperature=0.0,
+            )
+    except groq.APIError as exc:
+        raise RuntimeError(f"Groq transcription failed: {exc}") from exc
 
-    transcription: list[dict] = []
-    for segment in segments:
-        transcription.append(_segment_to_dict(segment))
+    transcription_rows: list[dict] = []
+    for segment in _extract_segments(transcription):
+        transcription_rows.append(_segment_to_dict(segment))
 
-    return transcription
+    return transcription_rows
 
