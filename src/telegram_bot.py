@@ -10,14 +10,31 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
-from telegram import BotCommand, Update
-from telegram.ext import Application, ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
+from telegram import BotCommand, InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import (
+    Application,
+    ApplicationBuilder,
+    CallbackQueryHandler,
+    CommandHandler,
+    ContextTypes,
+    MessageHandler,
+    filters,
+)
 
 from src.config import Config
 from src.engine_audio import transcribe_file
+from src.settings_store import SettingsStore, TranscriptionSettings, normalize_language, render_settings_summary
 
 
 logger = logging.getLogger(__name__)
+SETTINGS_ACTION_KEY = "settings_action"
+SETTINGS_ACTION_WAIT_LANGUAGE = "await_language"
+
+SETTINGS_CALLBACK_LANGUAGE = "settings:language"
+SETTINGS_CALLBACK_TOGGLE_PRESERVE = "settings:toggle_preserve"
+SETTINGS_CALLBACK_RESET = "settings:reset"
+SETTINGS_CALLBACK_AUTO = "settings:auto"
+SETTINGS_CALLBACK_CLOSE = "settings:close"
 
 SUPPORTED_AUDIO_EXTENSIONS = {"m4a", "mp3", "wav", "flac", "ogg", "webm", "mp4", "mpeg", "oga"}
 SUPPORTED_AUDIO_DOCUMENT_FILTER = filters.Document.AUDIO
@@ -116,6 +133,134 @@ def _build_output_text(transcript_text: str) -> str:
     return "No speech was detected."
 
 
+def _settings_store(context: ContextTypes.DEFAULT_TYPE) -> SettingsStore:
+    """Fetch the shared settings store from application state."""
+    return context.application.bot_data["settings_store"]
+
+
+def _user_id(update: Update) -> int | None:
+    """Return the active Telegram user ID if available."""
+    if update.effective_user is None:
+        return None
+    return update.effective_user.id
+
+
+def _settings_keyboard() -> InlineKeyboardMarkup:
+    """Build the inline keyboard for the settings menu."""
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton("Set language", callback_data=SETTINGS_CALLBACK_LANGUAGE),
+                InlineKeyboardButton("Auto language", callback_data=SETTINGS_CALLBACK_AUTO),
+            ],
+            [
+                InlineKeyboardButton("Toggle preserve", callback_data=SETTINGS_CALLBACK_TOGGLE_PRESERVE),
+                InlineKeyboardButton("Reset", callback_data=SETTINGS_CALLBACK_RESET),
+            ],
+            [InlineKeyboardButton("Close", callback_data=SETTINGS_CALLBACK_CLOSE)],
+        ]
+    )
+
+
+async def _send_settings_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show the current settings menu."""
+    user_id = _user_id(update)
+    message = update.effective_message
+    if user_id is None or message is None:
+        return
+
+    settings = _settings_store(context).get(user_id)
+    await message.reply_text(render_settings_summary(settings), reply_markup=_settings_keyboard())
+
+
+async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Open the settings menu."""
+    if not _is_authorized(update):
+        message = update.effective_message
+        if message is not None:
+            await message.reply_text("This bot is restricted to approved users or chats.")
+        return
+
+    context.user_data.pop(SETTINGS_ACTION_KEY, None)
+    await _send_settings_menu(update, context)
+
+
+async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle settings menu button clicks."""
+    query = update.callback_query
+    if query is None or update.effective_user is None:
+        return
+
+    if not _is_authorized(update):
+        await query.answer("This bot is restricted.", show_alert=True)
+        return
+
+    await query.answer()
+    user_id = update.effective_user.id
+    store = _settings_store(context)
+
+    if query.data == SETTINGS_CALLBACK_LANGUAGE:
+        context.user_data[SETTINGS_ACTION_KEY] = SETTINGS_ACTION_WAIT_LANGUAGE
+        if query.message is not None:
+            await query.message.reply_text(
+                "Send the language code you want to use.\n"
+                "Examples: `auto`, `en`, `es`, `pt-br`\n"
+                "Reply with the code as a normal text message.",
+                parse_mode="Markdown",
+            )
+        return
+
+    if query.data == SETTINGS_CALLBACK_AUTO:
+        updated = store.set_language(user_id, "auto")
+        if query.message is not None:
+            await query.message.reply_text(render_settings_summary(updated), reply_markup=_settings_keyboard())
+        return
+
+    if query.data == SETTINGS_CALLBACK_TOGGLE_PRESERVE:
+        updated = store.toggle_preserve_spoken_language(user_id)
+        if query.message is not None:
+            await query.message.reply_text(render_settings_summary(updated), reply_markup=_settings_keyboard())
+        return
+
+    if query.data == SETTINGS_CALLBACK_RESET:
+        updated = store.reset(user_id)
+        if query.message is not None:
+            await query.message.reply_text(render_settings_summary(updated), reply_markup=_settings_keyboard())
+        return
+
+    if query.data == SETTINGS_CALLBACK_CLOSE:
+        if query.message is not None:
+            await query.message.edit_text("Settings menu closed.")
+        return
+
+
+async def settings_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Capture the next text message as a language setting value."""
+    message = update.effective_message
+    user = update.effective_user
+    if message is None or user is None:
+        return
+
+    if context.user_data.get(SETTINGS_ACTION_KEY) != SETTINGS_ACTION_WAIT_LANGUAGE:
+        return
+
+    if not _is_authorized(update):
+        await message.reply_text("This bot is restricted to approved users or chats.")
+        context.user_data.pop(SETTINGS_ACTION_KEY, None)
+        return
+
+    raw_value = (message.text or "").strip()
+    try:
+        normalized_language = normalize_language(raw_value)
+    except ValueError as exc:
+        await message.reply_text(f"{exc}\n\nTry again with a valid code like `auto`, `en`, or `pt-br`.", parse_mode="Markdown")
+        return
+
+    updated = _settings_store(context).set_language(user.id, normalized_language)
+    context.user_data.pop(SETTINGS_ACTION_KEY, None)
+    await message.reply_text(render_settings_summary(updated), reply_markup=_settings_keyboard())
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Greet the user and explain how to use the bot."""
     message = update.effective_message
@@ -124,6 +269,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     await message.reply_text(
         "Send me a voice note, audio file, or audio document and I will transcribe it.\n"
+        "Use /settings to choose the transcription language and whether to preserve code-switching.\n"
         "If you add a caption, I will use it as extra transcription context."
     )
 
@@ -141,7 +287,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "- Audio documents such as .m4a, .mp3, .wav, .flac, .ogg, .webm\n\n"
         "Output:\n"
         "- A TXT file is saved in the configured output directory\n"
-        "- A text transcript is returned in chat when it is short enough"
+        "- A text transcript is returned in chat when it is short enough\n\n"
+        "Use /settings to choose the transcription language and whether to preserve mixed-language speech."
     )
 
 
@@ -167,7 +314,14 @@ async def transcribe_update(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     try:
         audio_path = await _download_attachment(context, attachment, temp_dir)
-        rows = await asyncio.to_thread(transcribe_file, str(audio_path), message.caption)
+        user_id = _user_id(update)
+        user_settings = _settings_store(context).get(user_id) if user_id is not None else TranscriptionSettings()
+        rows = await asyncio.to_thread(
+            transcribe_file,
+            str(audio_path),
+            message.caption,
+            user_settings,
+        )
 
         transcript_text = _rows_to_text(rows)
         output_text = _build_output_text(transcript_text)
@@ -205,6 +359,7 @@ async def post_init(application: Application) -> None:
         [
             BotCommand("start", "Start the bot"),
             BotCommand("help", "Show usage instructions"),
+            BotCommand("settings", "Change transcription settings"),
         ]
     )
 
@@ -221,8 +376,13 @@ def build_application() -> Application:
         .build()
     )
 
+    application.bot_data["settings_store"] = SettingsStore(Config.USER_CONFIG_FILE)
+
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CommandHandler("settings", settings_command))
+    application.add_handler(CallbackQueryHandler(settings_callback, pattern=r"^settings:"))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, settings_text))
     application.add_handler(MessageHandler(SUPPORTED_AUDIO_FILTER, transcribe_update))
     application.add_error_handler(on_error)
     return application

@@ -64,9 +64,23 @@ TELEGRAM_ALLOWED_CHAT_IDS=123456789
 
 Leave these empty if you want the bot to accept messages from anyone who can reach it.
 
+## Settings inside Telegram
+
+Use `/settings` in the Telegram chat to change how transcription behaves for your account.
+
+You can:
+
+- choose the transcription language
+- leave it on `auto` for mixed or unknown language audio
+- turn code-switch preservation on or off
+
+The bot saves these choices in a local `.config` file for your Telegram user ID.
+That means your settings stay the same after you restart the bot.
+
 ## Files you will touch most often
 
 - `.env` for secrets and local settings
+- `.config` for your Telegram transcription preferences
 - `input/` if you want to keep sample audio files locally
 - `output/` for saved TXT transcripts
 

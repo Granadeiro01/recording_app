@@ -1,5 +1,6 @@
 # Local environment files
 .env
+.config
 .venv/
 
 # Python bytecode and caches
@@ -17,4 +18,3 @@ dist/
 # Local output directories
 output/
 input/
-

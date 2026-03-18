@@ -9,6 +9,7 @@ import groq
 from groq import Groq
 
 from src.config import Config
+from src.settings_store import TranscriptionSettings
 
 
 def _validate_audio_file(file_path: str) -> Path:
@@ -51,7 +52,11 @@ def _extract_segments(transcription: Any) -> list[Any]:
     return list(getattr(transcription, "segments", []))
 
 
-def transcribe_file(file_path: str, prompt: str | None = None) -> list[dict]:
+def transcribe_file(
+    file_path: str,
+    prompt: str | None = None,
+    settings: TranscriptionSettings | None = None,
+) -> list[dict]:
     """
     Transcribe a single audio file with Groq and return structured segments.
 
@@ -60,17 +65,25 @@ def transcribe_file(file_path: str, prompt: str | None = None) -> list[dict]:
     """
     audio_path = _validate_audio_file(file_path)
     client = _build_client()
+    active_settings = settings or TranscriptionSettings()
+    request_prompt = active_settings.build_prompt(prompt)
 
     try:
         with audio_path.open("rb") as audio_file:
-            transcription = client.audio.transcriptions.create(
-                file=audio_file,
-                model=Config.GROQ_TRANSCRIPTION_MODEL,
-                response_format="verbose_json",
-                timestamp_granularities=["segment"],
-                temperature=0.0,
-                prompt=prompt or None,
-            )
+            request_kwargs: dict[str, Any] = {
+                "file": audio_file,
+                "model": Config.GROQ_TRANSCRIPTION_MODEL,
+                "response_format": "verbose_json",
+                "timestamp_granularities": ["segment"],
+                "temperature": 0.0,
+            }
+            groq_language = active_settings.groq_language()
+            if groq_language is not None:
+                request_kwargs["language"] = groq_language
+            if request_prompt is not None:
+                request_kwargs["prompt"] = request_prompt
+
+            transcription = client.audio.transcriptions.create(**request_kwargs)
     except groq.APIError as exc:
         raise RuntimeError(f"Groq transcription failed: {exc}") from exc
 

@@ -37,6 +37,8 @@ class Config:
     # Core runtime paths
     INPUT_DIR = Path(os.getenv("INPUT_DIR", BASE_DIR / "input"))
     OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", BASE_DIR / "output"))
+    USER_CONFIG_FILE = BASE_DIR / ".config"
+    USER_CONFIG_EXAMPLE_FILE = BASE_DIR / ".config.example"
 
     # Groq transcription runtime
     GROQ_TRANSCRIPTION_MODEL = os.getenv("GROQ_TRANSCRIPTION_MODEL", "whisper-large-v3")

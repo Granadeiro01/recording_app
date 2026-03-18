@@ -11,6 +11,7 @@ from src.telegram_bot import build_application
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(message)s")
 logger = logging.getLogger(__name__)
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
 def main() -> int:

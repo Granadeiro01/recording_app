@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "defaults": {
+    "language": "auto",
+    "preserve_spoken_language": true
+  },
+  "users": {}
+}
