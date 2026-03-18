@@ -12,6 +12,23 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+def _parse_int_ids(raw_value: str) -> tuple[int, ...]:
+    """Parse a comma-separated list of integer IDs from the environment."""
+    if not raw_value.strip():
+        return ()
+
+    ids: list[int] = []
+    for item in raw_value.split(","):
+        value = item.strip()
+        if not value:
+            continue
+        try:
+            ids.append(int(value))
+        except ValueError as exc:
+            raise ValueError(f"Invalid integer ID value: {value!r}") from exc
+    return tuple(ids)
+
+
 class Config:
     """Simple config container populated from environment variables."""
 
@@ -27,8 +44,5 @@ class Config:
     # Service credentials and integration settings
     GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
     TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
-    TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
-    TELEGRAM_API_ID = os.getenv("TELEGRAM_API_ID", "")
-    TELEGRAM_API_HASH = os.getenv("TELEGRAM_API_HASH", "")
-    TELEGRAM_PHONE_NUMBER = os.getenv("TELEGRAM_PHONE_NUMBER", "")
-    TELEGRAM_SESSION_STRING = os.getenv("TELEGRAM_SESSION_STRING", "")
+    TELEGRAM_ALLOWED_USER_IDS = _parse_int_ids(os.getenv("TELEGRAM_ALLOWED_USER_IDS", ""))
+    TELEGRAM_ALLOWED_CHAT_IDS = _parse_int_ids(os.getenv("TELEGRAM_ALLOWED_CHAT_IDS", ""))

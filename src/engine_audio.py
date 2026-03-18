@@ -51,7 +51,7 @@ def _extract_segments(transcription: Any) -> list[Any]:
     return list(getattr(transcription, "segments", []))
 
 
-def transcribe_file(file_path: str) -> list[dict]:
+def transcribe_file(file_path: str, prompt: str | None = None) -> list[dict]:
     """
     Transcribe a single audio file with Groq and return structured segments.
 
@@ -69,6 +69,7 @@ def transcribe_file(file_path: str) -> list[dict]:
                 response_format="verbose_json",
                 timestamp_granularities=["segment"],
                 temperature=0.0,
+                prompt=prompt or None,
             )
     except groq.APIError as exc:
         raise RuntimeError(f"Groq transcription failed: {exc}") from exc
@@ -78,4 +79,3 @@ def transcribe_file(file_path: str) -> list[dict]:
         transcription_rows.append(_segment_to_dict(segment))
 
     return transcription_rows
-
