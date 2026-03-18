@@ -10,7 +10,6 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
-import pandas as pd
 from telegram import BotCommand, Update
 from telegram.ext import Application, ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
 
@@ -37,7 +36,7 @@ class DownloadedAttachment:
 
 
 def _ensure_output_dir() -> None:
-    """Create the output directory before writing CSV exports."""
+    """Create the output directory before writing transcript exports."""
     Config.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 
@@ -110,6 +109,13 @@ def _rows_to_text(rows: list[dict]) -> str:
     return "\n".join(row["text"] for row in rows if row.get("text"))
 
 
+def _build_output_text(transcript_text: str) -> str:
+    """Return the final text written to disk and sent to the user."""
+    if transcript_text.strip():
+        return transcript_text.strip()
+    return "No speech was detected."
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Greet the user and explain how to use the bot."""
     message = update.effective_message
@@ -134,7 +140,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "- Audio messages\n"
         "- Audio documents such as .m4a, .mp3, .wav, .flac, .ogg, .webm\n\n"
         "Output:\n"
-        "- A CSV file is saved in the configured output directory\n"
+        "- A TXT file is saved in the configured output directory\n"
         "- A text transcript is returned in chat when it is short enough"
     )
 
@@ -163,20 +169,20 @@ async def transcribe_update(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         audio_path = await _download_attachment(context, attachment, temp_dir)
         rows = await asyncio.to_thread(transcribe_file, str(audio_path), message.caption)
 
-        df = pd.DataFrame(rows)
-        output_file = Config.OUTPUT_DIR / f"{audio_path.stem}_transcription.csv"
-        df.to_csv(output_file, index=False)
-
         transcript_text = _rows_to_text(rows)
+        output_text = _build_output_text(transcript_text)
+        output_file = Config.OUTPUT_DIR / f"{audio_path.stem}_transcription.txt"
+        output_file.write_text(output_text, encoding="utf-8")
+
         if transcript_text:
             if len(transcript_text) <= 3500:
                 await message.reply_text(transcript_text)
             else:
-                await message.reply_text("Transcript is too long for a single chat message, so I saved the CSV instead.")
+                await message.reply_text("Transcript is too long for a single chat message, so I saved the TXT file instead.")
         else:
             await message.reply_text("No speech was detected.")
 
-        await message.reply_document(document=output_file, caption="Transcription CSV")
+        await message.reply_document(document=output_file, caption="Transcription TXT")
         try:
             await status_message.delete()
         except Exception:

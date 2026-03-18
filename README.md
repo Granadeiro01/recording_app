@@ -7,7 +7,7 @@ A small Telegram bot that transcribes voice notes and audio files into text.
 - You send the bot a voice note, audio file, or audio document in Telegram.
 - The bot transcribes the audio using Groq.
 - The bot sends the text back in chat.
-- A CSV copy is also saved locally in the `output/` folder.
+- A TXT copy is also saved locally in the `output/` folder.
 
 ## What you need first
 
@@ -45,7 +45,7 @@ GROQ_TRANSCRIPTION_MODEL=whisper-large-v3
 2. Send a voice message, audio file, or supported audio document.
 3. Wait a few seconds.
 4. Read the transcript in chat.
-5. Find the CSV file in `output/`.
+5. Find the TXT file in `output/`.
 
 ## Supported audio types
 
@@ -68,10 +68,9 @@ Leave these empty if you want the bot to accept messages from anyone who can rea
 
 - `.env` for secrets and local settings
 - `input/` if you want to keep sample audio files locally
-- `output/` for saved CSV transcripts
+- `output/` for saved TXT transcripts
 
 ## Notes
 
 - Do not commit `.env` to GitHub.
 - Use `.env.example` as the template if you need to recreate the settings.
-
